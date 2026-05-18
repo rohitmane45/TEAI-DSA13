@@ -1,337 +1,654 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
-  ThemeProvider, createTheme, CssBaseline, Container, Box, Typography,
-  Card, CardContent, Button, Tabs, Tab, TextField, Select, MenuItem,
-  InputLabel, FormControl, CircularProgress, Alert, Badge, Chip,
-  Tooltip, Paper, Pagination, Grow, Stack, useMediaQuery,
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
+  Container,
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Grid,
+  Button,
+  Tabs,
+  Tab,
+  TextField,
+  Select,
+  MenuItem,
+  InputLabel,
+  FormControl,
+  CircularProgress,
+  Alert,
+  Badge,
+  Chip,
+  IconButton,
+  Tooltip,
+  Paper,
+  Divider,
+  Pagination,
 } from '@mui/material';
 import {
-  Notifications as BellIcon, PriorityHigh as PrioIcon,
-  CheckCircleOutline as CheckIcon, Refresh as RefreshIcon,
-  Star as StarIcon, WorkOutline as PlacementIcon,
-  SchoolOutlined as ResultIcon, EventNote as EventIcon,
-  FiberManualRecord as DotIcon, CheckCircle as ReadIcon,
+  Notifications as NotificationsIcon,
+  Inbox as InboxIcon,
+  CheckCircle as CheckCircleIcon,
+  Refresh as RefreshIcon,
+  Star as StarIcon,
+  FiberNew as FiberNewIcon,
+  InfoOutlined as InfoOutlinedIcon,
 } from '@mui/icons-material';
 
-/* ── Google Fonts ── */
-const fontLink = document.createElement('link');
-fontLink.rel = 'stylesheet';
-fontLink.href = 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap';
-document.head.appendChild(fontLink);
-
-const theme = createTheme({
+// 1. Establish the custom Dark Mode Theme with rich color tokens (Complies with Design Aesthetics)
+const darkTheme = createTheme({
   palette: {
     mode: 'dark',
-    primary: { main: '#a78bfa' },
-    secondary: { main: '#22d3ee' },
-    background: { default: '#060b18', paper: '#0d1526' },
-    text: { primary: '#e2e8f0', secondary: '#64748b' },
+    primary: {
+      main: '#6366f1', // Vibrant Indigo
+    },
+    secondary: {
+      main: '#06b6d4', // Cyan Accent
+    },
+    background: {
+      default: '#0a0f1d', // Ultra dark background
+      paper: '#111827',   // Dark card background
+    },
+    text: {
+      primary: '#f9fafb',
+      secondary: '#9ca3af',
+    },
   },
-  typography: { fontFamily: '"Plus Jakarta Sans", sans-serif' },
-  shape: { borderRadius: 14 },
+  typography: {
+    fontFamily: '"Outfit", "Inter", "Roboto", sans-serif',
+    h3: {
+      fontWeight: 800,
+      letterSpacing: '-0.025em',
+    },
+    h4: {
+      fontWeight: 700,
+    },
+    h6: {
+      fontWeight: 600,
+    },
+  },
   components: {
-    MuiButton: { styleOverrides: { root: { textTransform: 'none', fontWeight: 700 } } },
-    MuiPaper: { styleOverrides: { root: { backgroundImage: 'none' } } },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          background: 'rgba(17, 24, 39, 0.7)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: 16,
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          '&:hover': {
+            transform: 'translateY(-4px)',
+            borderColor: 'rgba(99, 102, 241, 0.4)',
+            boxShadow: '0 12px 20px -10px rgba(99, 102, 241, 0.3)',
+          },
+        },
+      },
+    },
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+          textTransform: 'none',
+          fontWeight: 600,
+        },
+      },
+    },
   },
 });
 
-const TYPES: Record<string, { color: string; glow: string; icon: React.ReactNode; label: string }> = {
-  placement: { color: '#f59e0b', glow: '#f59e0b40', icon: <PlacementIcon />, label: 'Placement' },
-  result:    { color: '#10b981', glow: '#10b98140', icon: <ResultIcon />,    label: 'Result' },
-  event:     { color: '#e879f9', glow: '#e879f940', icon: <EventIcon />,     label: 'Event' },
-  general:   { color: '#64748b', glow: '#64748b20', icon: <BellIcon />,      label: 'General' },
-};
-
-function getType(t: string) {
-  const k = t.toLowerCase();
-  if (k.includes('placement')) return TYPES.placement;
-  if (k.includes('result'))    return TYPES.result;
-  if (k.includes('event'))     return TYPES.event;
-  return TYPES.general;
+interface Notification {
+  ID: string;
+  Type: string;
+  Message: string;
+  Timestamp: string;
 }
 
-function ago(ts: string) {
-  const m = Math.floor((Date.now() - new Date(ts.replace(' ', 'T')).getTime()) / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
+function App() {
+  const [activeTab, setActiveTab] = useState<number>(0);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [priorityNotifications, setPriorityNotifications] = useState<Notification[]>([]);
+  
+  // States for All Notifications Page
+  const [limit, setLimit] = useState<number>(10);
+  const [page, setPage] = useState<number>(1);
+  const [typeFilter, setTypeFilter] = useState<string>('');
+  
+  // States for Priority Inbox Page
+  const [priorityN, setPriorityN] = useState<number>(10);
+  const [priorityTypeFilter, setPriorityTypeFilter] = useState<string>('');
+  
+  // Loading & Error states
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Local storage for viewed notifications
+  const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
 
-interface N { ID: string; Type: string; Message: string; Timestamp: string; }
-
-export default function App() {
-  const [tab, setTab]         = useState(0);
-  const [all, setAll]         = useState<N[]>([]);
-  const [prio, setPrio]       = useState<N[]>([]);
-  const [limit, setLimit]     = useState(10);
-  const [page, setPage]       = useState(1);
-  const [filter, setFilter]   = useState('');
-  const [topN, setTopN]       = useState(10);
-  const [pFilter, setPFilter] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [err, setErr]         = useState<string | null>(null);
-  const [read, setRead]       = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('r') || '[]')); } catch { return new Set(); }
-  });
-  const mobile = useMediaQuery('(max-width:600px)');
-
-  const saveRead = (s: Set<string>) => { setRead(s); localStorage.setItem('r', JSON.stringify([...s])); };
-  const mark = (id: string) => { const s = new Set(read); s.add(id); saveRead(s); };
-  const markAll = () => { const s = new Set(read); [...all, ...prio].forEach(n => s.add(n.ID)); saveRead(s); };
-
-  const fetchAll = useCallback(async () => {
-    setLoading(true); setErr(null);
-    try {
-      const r = await axios.get('http://localhost:5000/notifications', {
-        params: { limit, page, notification_type: filter || undefined },
-      });
-      if (r.data?.success) setAll(r.data.notifications);
-    } catch (e: any) { setErr(e.message); } finally { setLoading(false); }
-  }, [limit, page, filter]);
-
-  const fetchPrio = useCallback(async () => {
-    setLoading(true); setErr(null);
-    try {
-      const r = await axios.get('http://localhost:5000/notifications/priority', { params: { n: topN } });
-      if (r.data?.success) {
-        let d = r.data.notifications as N[];
-        if (pFilter) d = d.filter(n => n.Type.toLowerCase() === pFilter.toLowerCase());
-        setPrio(d);
+  // Load viewed notification IDs on start
+  useEffect(() => {
+    const saved = localStorage.getItem('viewedNotificationIds');
+    if (saved) {
+      try {
+        setViewedIds(new Set(JSON.parse(saved)));
+      } catch (e) {
+        // Silently capture parse errors
       }
-    } catch (e: any) { setErr(e.message); } finally { setLoading(false); }
-  }, [topN, pFilter]);
+    }
+  }, []);
 
-  useEffect(() => { tab === 0 ? fetchAll() : fetchPrio(); }, [tab, fetchAll, fetchPrio]);
+  // Sync viewed notifications to local storage
+  const markAsViewed = (id: string) => {
+    const newViewed = new Set(viewedIds);
+    newViewed.add(id);
+    setViewedIds(newViewed);
+    localStorage.setItem('viewedNotificationIds', JSON.stringify(Array.from(newViewed)));
+  };
 
-  const list  = tab === 0 ? all : prio;
-  const unread = all.filter(n => !read.has(n.ID)).length;
+  const markAllAsViewed = () => {
+    const allIds = new Set(viewedIds);
+    notifications.forEach((n) => allIds.add(n.ID));
+    priorityNotifications.forEach((n) => allIds.add(n.ID));
+    setViewedIds(allIds);
+    localStorage.setItem('viewedNotificationIds', JSON.stringify(Array.from(allIds)));
+  };
+
+  // Fetch paginated/filtered notifications
+  const fetchAllNotifications = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await axios.get('http://localhost:5000/notifications', {
+        params: {
+          limit,
+          page,
+          notification_type: typeFilter || undefined,
+        },
+      });
+      if (response.data && response.data.success) {
+        setNotifications(response.data.notifications);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to connect to the backend server.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch prioritized notifications using custom Heap algorithm
+  const fetchPriorityNotifications = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await axios.get('http://localhost:5000/notifications/priority', {
+        params: {
+          n: priorityN,
+        },
+      });
+      if (response.data && response.data.success) {
+        let fetched = response.data.notifications as Notification[];
+        // Client-side filter on type if specified
+        if (priorityTypeFilter) {
+          fetched = fetched.filter(
+            (n) => n.Type.toLowerCase() === priorityTypeFilter.toLowerCase()
+          );
+        }
+        setPriorityNotifications(fetched);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch priority notifications.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Trigger fetches depending on active view tab
+  useEffect(() => {
+    if (activeTab === 0) {
+      fetchAllNotifications();
+    } else {
+      fetchPriorityNotifications();
+    }
+  }, [activeTab, limit, page, typeFilter, priorityN, priorityTypeFilter]);
+
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
+    setError(null);
+  };
+
+  // Style chip mapping for Placement, Result, Event categories
+  const getBadgeDetails = (type: string) => {
+    const normType = type.toLowerCase();
+    if (normType.includes('placement')) {
+      return { label: 'Placement', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.15)' };
+    }
+    if (normType.includes('result')) {
+      return { label: 'Result', color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)' };
+    }
+    if (normType.includes('event')) {
+      return { label: 'Event', color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.15)' };
+    }
+    return { label: 'General', color: '#9ca3af', bg: 'rgba(156, 163, 175, 0.15)' };
+  };
+
+  // Compute stats
+  const unreadCount = notifications.filter(n => !viewedIds.has(n.ID)).length;
 
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={darkTheme}>
       <CssBaseline />
-      <Box sx={{ minHeight: '100vh', background: 'radial-gradient(ellipse 80% 50% at 50% -10%, rgba(167,139,250,0.18), transparent), #060b18' }}>
-
-        {/* HEADER */}
-        <Box sx={{
-          position: 'relative', overflow: 'hidden',
-          background: 'linear-gradient(135deg, rgba(167,139,250,0.12) 0%, rgba(34,211,238,0.06) 100%)',
-          borderBottom: '1px solid rgba(167,139,250,0.15)', py: { xs: 3, md: 4.5 },
-        }}>
-          {/* Decorative blobs */}
-          <Box sx={{ position:'absolute', top:-60, right:-60, width:200, height:200, borderRadius:'50%', background:'radial-gradient(circle, rgba(167,139,250,0.2), transparent)', filter:'blur(40px)', pointerEvents:'none' }} />
-          <Box sx={{ position:'absolute', bottom:-40, left:-40, width:160, height:160, borderRadius:'50%', background:'radial-gradient(circle, rgba(34,211,238,0.15), transparent)', filter:'blur(30px)', pointerEvents:'none' }} />
-
-          <Container maxWidth="lg">
-            <Stack direction={mobile ? 'column' : 'row'} alignItems={mobile ? 'flex-start' : 'center'} justifyContent="space-between" spacing={2}>
-              <Stack direction="row" alignItems="center" spacing={2.5}>
-                <Badge badgeContent={unread} color="error" sx={{ '& .MuiBadge-badge': { fontWeight: 800, minWidth: 22, height: 22 } }}>
-                  <Box sx={{
-                    width: 58, height: 58, borderRadius: 3.5,
-                    background: 'linear-gradient(135deg, #7c3aed, #a78bfa)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 0 0 1px rgba(167,139,250,0.3), 0 8px 32px rgba(124,58,237,0.5)',
-                  }}>
-                    <BellIcon sx={{ color: '#fff', fontSize: 30 }} />
+      <Box sx={{ minHeight: '100vh', py: 4, display: 'flex', flexDirection: 'column' }}>
+        
+        {/* Navigation / Header Area */}
+        <Container maxWidth="lg" sx={{ mb: 4 }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              borderRadius: 4,
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(6, 182, 212, 0.1) 100%)',
+              border: '1px solid rgba(99, 102, 241, 0.2)',
+              mb: 3,
+            }}
+          >
+            <Grid container alignItems="center" spacing={2}>
+              <Grid item xs={12} md={6}>
+                <Box display="flex" alignItems="center" gap={2}>
+                  <Badge badgeContent={unreadCount} color="error" overlap="circular">
+                    <AvatarIconWrapper>
+                      <NotificationsIcon color="primary" sx={{ fontSize: 32 }} />
+                    </AvatarIconWrapper>
+                  </Badge>
+                  <Box>
+                    <Typography variant="h4" sx={{ fontWeight: 800 }}>
+                      Campus Notifications
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Stay updated with real-time Placements, Results, and Events
+                    </Typography>
                   </Box>
-                </Badge>
-                <Box>
-                  <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.5rem', md: '1.9rem' }, letterSpacing: '-0.03em', background: 'linear-gradient(135deg, #e2e8f0 0%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                    Campus Notifications
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Live feed · Placements, Results &amp; Events
-                  </Typography>
                 </Box>
-              </Stack>
-              <Stack direction="row" spacing={1.5}>
-                <Button variant="outlined" size="small" startIcon={<CheckIcon />} onClick={markAll}
-                  sx={{ borderColor: 'rgba(167,139,250,0.3)', color: '#a78bfa', '&:hover': { borderColor: '#a78bfa', background: 'rgba(167,139,250,0.08)' } }}>
-                  Mark All Read
+              </Grid>
+              <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' }, gap: 1.5 }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<CheckCircleIcon />}
+                  onClick={markAllAsViewed}
+                  disabled={loading}
+                >
+                  Mark All as Read
                 </Button>
-                <Button variant="contained" size="small" startIcon={<RefreshIcon />}
-                  onClick={tab === 0 ? fetchAll : fetchPrio}
-                  sx={{ background: 'linear-gradient(135deg, #7c3aed, #a78bfa)', boxShadow: '0 4px 20px rgba(124,58,237,0.5)', '&:hover': { background: 'linear-gradient(135deg, #6d28d9, #818cf8)' } }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<RefreshIcon />}
+                  onClick={activeTab === 0 ? fetchAllNotifications : fetchPriorityNotifications}
+                  disabled={loading}
+                >
                   Refresh
                 </Button>
-              </Stack>
-            </Stack>
-          </Container>
-        </Box>
-
-        <Container maxWidth="lg" sx={{ py: 4 }}>
-
-          {/* TABS */}
-          <Paper sx={{
-            mb: 3, background: 'rgba(13,21,38,0.8)', border: '1px solid rgba(255,255,255,0.07)',
-            backdropFilter: 'blur(12px)',
-          }} elevation={0}>
-            <Tabs value={tab} onChange={(_, v) => { setTab(v); setErr(null); }}
-              variant="fullWidth" indicatorColor="primary" textColor="primary"
-              sx={{ '& .MuiTab-root': { py: 2, fontWeight: 700, fontSize: '0.9rem', gap: 1 }, '& .MuiTabs-indicator': { height: 3, borderRadius: 2, background: 'linear-gradient(90deg, #7c3aed, #a78bfa)' } }}>
-              <Tab icon={<BellIcon />} iconPosition="start" label="All Notifications" />
-              <Tab icon={<PrioIcon />} iconPosition="start" label="Priority Inbox" />
-            </Tabs>
+              </Grid>
+            </Grid>
           </Paper>
 
-          {err && <Alert severity="error" sx={{ mb: 3 }}>{err}</Alert>}
+          {/* Tab Selection (All vs Priority) */}
+          <Tabs
+            value={activeTab}
+            onChange={handleTabChange}
+            indicatorColor="primary"
+            textColor="primary"
+            variant="fullWidth"
+            sx={{
+              borderBottom: 1,
+              borderColor: 'divider',
+              '& .MuiTab-root': { py: 2, fontWeight: 700, fontSize: '1rem' },
+            }}
+          >
+            <Tab
+              icon={<NotificationsIcon />}
+              iconPosition="start"
+              label="All Notifications"
+            />
+            <Tab
+              icon={<InboxIcon />}
+              iconPosition="start"
+              label="Priority Inbox"
+            />
+          </Tabs>
+        </Container>
 
-          {/* FILTERS */}
-          <Paper sx={{ p: 2.5, mb: 3, background: 'rgba(13,21,38,0.6)', border: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(8px)' }} elevation={0}>
-            {tab === 0 ? (
-              <Stack direction={mobile ? 'column' : 'row'} spacing={2} alignItems="center">
-                <FormControl size="small" sx={{ minWidth: 170 }}>
-                  <InputLabel>Category</InputLabel>
-                  <Select value={filter} label="Category" onChange={e => { setFilter(e.target.value); setPage(1); }}>
-                    <MenuItem value="">All Categories</MenuItem>
-                    <MenuItem value="Placement">🏢 Placement</MenuItem>
-                    <MenuItem value="Result">📊 Result</MenuItem>
-                    <MenuItem value="Event">🎉 Event</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl size="small" sx={{ minWidth: 130 }}>
-                  <InputLabel>Per Page</InputLabel>
-                  <Select value={limit} label="Per Page" onChange={e => { setLimit(Number(e.target.value)); setPage(1); }}>
-                    {[5,10,15,20].map(v => <MenuItem key={v} value={v}>{v} items</MenuItem>)}
-                  </Select>
-                </FormControl>
-                <Box sx={{ ml:'auto', px:2, py:0.8, borderRadius:2, background:'rgba(167,139,250,0.08)', border:'1px solid rgba(167,139,250,0.2)' }}>
-                  <Typography variant="caption" sx={{ color:'#a78bfa', fontWeight:700 }}>{unread} unread</Typography>
+        {/* Content Container */}
+        <Container maxWidth="lg" sx={{ flexGrow: 1 }}>
+          {error && (
+            <Alert severity="error" sx={{ mb: 4, borderRadius: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          {/* 1. All Notifications View */}
+          {activeTab === 0 && (
+            <Box>
+              {/* Toolbar Controls */}
+              <Paper sx={{ p: 2.5, mb: 4, borderRadius: 3, background: '#111827' }} elevation={0}>
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={12} sm={4}>
+                    <FormControl fullWidth variant="outlined" size="small">
+                      <InputLabel>Category Filter</InputLabel>
+                      <Select
+                        value={typeFilter}
+                        onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
+                        label="Category Filter"
+                      >
+                        <MenuItem value="">All Categories</MenuItem>
+                        <MenuItem value="Placement">Placements</MenuItem>
+                        <MenuItem value="Result">Results</MenuItem>
+                        <MenuItem value="Event">Events</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <FormControl fullWidth variant="outlined" size="small">
+                      <InputLabel>Items Per Page</InputLabel>
+                      <Select
+                        value={limit}
+                        onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+                        label="Items Per Page"
+                      >
+                        <MenuItem value={5}>5 Items</MenuItem>
+                        <MenuItem value={10}>10 Items</MenuItem>
+                        <MenuItem value={15}>15 Items</MenuItem>
+                        <MenuItem value={20}>20 Items</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={4} display="flex" justifyContent="flex-end">
+                    <Typography variant="body2" color="text.secondary">
+                      Showing loaded feed
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+
+              {loading ? (
+                <LoadingSpinner />
+              ) : notifications.length === 0 ? (
+                <EmptyState message="No notifications matching the selected filters were found." />
+              ) : (
+                <Grid container spacing={2.5}>
+                  {notifications.map((notif) => (
+                    <Grid item xs={12} key={notif.ID}>
+                      <NotificationCard
+                        notif={notif}
+                        viewed={viewedIds.has(notif.ID)}
+                        onView={() => markAsViewed(notif.ID)}
+                        badgeDetails={getBadgeDetails(notif.Type)}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+
+              {/* Simple Local Pagination Control */}
+              {!loading && notifications.length > 0 && (
+                <Box display="flex" justifyContent="center" mt={4}>
+                  <Pagination
+                    count={5} // Keep pagination slider fluid
+                    page={page}
+                    onChange={(_e, val) => setPage(val)}
+                    color="primary"
+                    size="large"
+                  />
                 </Box>
-              </Stack>
-            ) : (
-              <Stack direction={mobile ? 'column' : 'row'} spacing={2} alignItems="center">
-                <TextField size="small" label="Top N" type="number" value={topN}
-                  onChange={e => setTopN(Math.max(1, Number(e.target.value)))}
-                  inputProps={{ min: 1 }} sx={{ width: 110 }} />
-                <FormControl size="small" sx={{ minWidth: 170 }}>
-                  <InputLabel>Filter Type</InputLabel>
-                  <Select value={pFilter} label="Filter Type" onChange={e => setPFilter(e.target.value)}>
-                    <MenuItem value="">All Types</MenuItem>
-                    <MenuItem value="Placement">🏢 Placement</MenuItem>
-                    <MenuItem value="Result">📊 Result</MenuItem>
-                    <MenuItem value="Event">🎉 Event</MenuItem>
-                  </Select>
-                </FormControl>
-                <Chip icon={<StarIcon sx={{ color:'#f59e0b !important' }} />} label={`Top ${topN} by Priority`}
-                  sx={{ ml:'auto', background:'rgba(245,158,11,0.12)', color:'#f59e0b', border:'1px solid rgba(245,158,11,0.3)', fontWeight:700 }} />
-              </Stack>
-            )}
-          </Paper>
-
-          {/* PRIORITY INFO BANNER */}
-          {tab === 1 && (
-            <Box sx={{ mb:3, p:2, borderRadius:2, background:'linear-gradient(135deg, rgba(167,139,250,0.08), rgba(34,211,238,0.05))', border:'1px dashed rgba(167,139,250,0.25)', display:'flex', alignItems:'center', gap:1.5 }}>
-              <StarIcon sx={{ color:'#a78bfa', fontSize:22 }} />
-              <Typography variant="body2" color="text.secondary">
-                <strong style={{ color:'#e2e8f0' }}>Min-Heap Engine:</strong> Ranked by weight —{' '}
-                <span style={{ color:'#f59e0b', fontWeight:700 }}>Placement(3)</span> &gt;{' '}
-                <span style={{ color:'#10b981', fontWeight:700 }}>Result(2)</span> &gt;{' '}
-                <span style={{ color:'#e879f9', fontWeight:700 }}>Event(1)</span>, then newest first.
-              </Typography>
+              )}
             </Box>
           )}
 
-          {/* NOTIFICATION CARDS */}
-          {loading ? (
-            <Box display="flex" justifyContent="center" py={10}><CircularProgress size={40} thickness={4} sx={{ color:'#a78bfa' }} /></Box>
-          ) : list.length === 0 ? (
-            <Paper sx={{ p:8, textAlign:'center', background:'rgba(13,21,38,0.5)', border:'1px solid rgba(255,255,255,0.04)' }} elevation={0}>
-              <BellIcon sx={{ fontSize:56, color:'text.secondary', opacity:0.3, mb:2 }} />
-              <Typography color="text.secondary">No notifications found.</Typography>
-            </Paper>
-          ) : (
-            <Stack spacing={1.5}>
-              {list.map((n, i) => {
-                const isRead = read.has(n.ID);
-                const t = getType(n.Type);
-                return (
-                  <Grow in key={n.ID} timeout={150 + i * 50}>
-                    <Card onClick={() => mark(n.ID)} sx={{
-                      cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                      background: isRead ? 'rgba(13,21,38,0.4)' : 'rgba(13,21,38,0.85)',
-                      border: `1px solid ${isRead ? 'rgba(255,255,255,0.04)' : t.color + '30'}`,
-                      backdropFilter: 'blur(10px)',
-                      transition: 'all 0.2s ease',
-                      opacity: isRead ? 0.55 : 1,
-                      '&:hover': !isRead ? {
-                        transform: 'translateY(-3px)',
-                        border: `1px solid ${t.color}60`,
-                        boxShadow: `0 12px 40px ${t.glow}`,
-                      } : {},
-                      /* left accent bar */
-                      '&::before': {
-                        content: '""', position: 'absolute', left:0, top:0,
-                        width: 4, height: '100%',
-                        background: isRead ? 'transparent' : `linear-gradient(180deg, ${t.color}, ${t.color}44)`,
-                        borderRadius: '4px 0 0 4px',
-                      },
-                    }}>
-                      <CardContent sx={{ p: { xs:2, md:2.5 }, '&:last-child': { pb:{ xs:2, md:2.5 } } }}>
-                        <Stack direction="row" alignItems="center" spacing={2}>
+          {/* 2. Priority Inbox View */}
+          {activeTab === 1 && (
+            <Box>
+              {/* Algorithm Details Header */}
+              <Box mb={4}>
+                <Paper
+                  sx={{
+                    p: 3,
+                    borderRadius: 3,
+                    background: 'rgba(99, 102, 241, 0.05)',
+                    border: '1px dashed rgba(99, 102, 241, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
+                  elevation={0}
+                >
+                  <StarIcon color="primary" sx={{ fontSize: 28 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Min-Heap Sorted:</strong> This page renders the top <code>n</code> updates utilizing our highly efficient size-capped Min-Heap routing algorithm. Prioritization strictly follows weight layers: <code>Placement &gt; Result &gt; Event</code>, tie-broken by time.
+                  </Typography>
+                </Paper>
+              </Box>
 
-                          {/* Rank badge (Priority view) */}
-                          {tab === 1 && (
-                            <Box sx={{ flexShrink:0, width:38, height:38, borderRadius:2, display:'flex', alignItems:'center', justifyContent:'center', background:`linear-gradient(135deg, ${t.color}25, ${t.color}10)`, border:`1px solid ${t.color}30` }}>
-                              <Typography sx={{ fontWeight:800, fontSize:'0.82rem', color:t.color }}>#{i+1}</Typography>
-                            </Box>
-                          )}
+              {/* Priority Controls */}
+              <Paper sx={{ p: 2.5, mb: 4, borderRadius: 3, background: '#111827' }} elevation={0}>
+                <Grid container spacing={3} alignItems="center">
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      fullWidth
+                      label="Capacity (n)"
+                      type="number"
+                      variant="outlined"
+                      size="small"
+                      value={priorityN}
+                      onChange={(e) => setPriorityN(Math.max(1, Number(e.target.value)))}
+                      inputProps={{ min: 1 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <FormControl fullWidth variant="outlined" size="small">
+                      <InputLabel>Type Filter</InputLabel>
+                      <Select
+                        value={priorityTypeFilter}
+                        onChange={(e) => setPriorityTypeFilter(e.target.value)}
+                        label="Type Filter"
+                      >
+                        <MenuItem value="">All Priority Types</MenuItem>
+                        <MenuItem value="Placement">Placements</MenuItem>
+                        <MenuItem value="Result">Results</MenuItem>
+                        <MenuItem value="Event">Events</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={4} display="flex" justifyContent="flex-end">
+                    <Chip
+                      icon={<StarIcon style={{ color: '#fbbf24' }} />}
+                      label={`Top ${priorityN} Priority`}
+                      variant="outlined"
+                      color="secondary"
+                    />
+                  </Grid>
+                </Grid>
+              </Paper>
 
-                          {/* Icon */}
-                          <Box sx={{ flexShrink:0, width:44, height:44, borderRadius:2.5, display:'flex', alignItems:'center', justifyContent:'center', background:`linear-gradient(135deg, ${t.color}20, ${t.color}08)`, border:`1px solid ${t.color}25`, color:t.color, boxShadow: isRead ? 'none' : `0 0 12px ${t.glow}` }}>
-                            {React.cloneElement(t.icon as React.ReactElement, { sx: { fontSize:22 } })}
-                          </Box>
-
-                          {/* Content */}
-                          <Box flex={1} minWidth={0}>
-                            <Stack direction="row" alignItems="center" spacing={1} mb={0.6} flexWrap="wrap">
-                              <Chip label={t.label} size="small" sx={{ height:22, fontSize:'0.68rem', fontWeight:800, background:`${t.color}18`, color:t.color, border:`1px solid ${t.color}30`, letterSpacing:'0.04em' }} />
-                              {!isRead && <DotIcon sx={{ fontSize:8, color:'#a78bfa' }} />}
-                              <Typography variant="caption" color="text.secondary">{ago(n.Timestamp)}</Typography>
-                            </Stack>
-                            <Typography sx={{ fontWeight:700, fontSize:'1rem', color: isRead ? 'text.secondary' : 'text.primary', textDecoration: isRead ? 'line-through' : 'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', letterSpacing:'-0.01em' }}>
-                              {n.Message}
-                            </Typography>
-                            <Typography variant="caption" sx={{ color:'text.secondary', opacity:0.5, fontSize:'0.65rem' }}>
-                              {n.Timestamp}
-                            </Typography>
-                          </Box>
-
-                          {/* Read status */}
-                          {!mobile && (
-                            <Tooltip title={isRead ? 'Read' : 'Click to mark as read'}>
-                              <Box sx={{ flexShrink:0, color: isRead ? 'text.secondary' : '#a78bfa', opacity: isRead ? 0.3 : 0.8 }}>
-                                {isRead ? <ReadIcon fontSize="small" /> : <DotIcon sx={{ fontSize:14 }} />}
-                              </Box>
-                            </Tooltip>
-                          )}
-                        </Stack>
-                      </CardContent>
-                    </Card>
-                  </Grow>
-                );
-              })}
-            </Stack>
-          )}
-
-          {/* PAGINATION */}
-          {tab === 0 && !loading && all.length > 0 && (
-            <Box display="flex" justifyContent="center" mt={4}>
-              <Pagination count={5} page={page} onChange={(_, v) => setPage(v)} color="primary" size="large"
-                sx={{ '& .MuiPaginationItem-root': { fontWeight:700 }, '& .Mui-selected': { background:'linear-gradient(135deg, #7c3aed, #a78bfa) !important' } }} />
+              {loading ? (
+                <LoadingSpinner />
+              ) : priorityNotifications.length === 0 ? (
+                <EmptyState message="No high priority items found in the current inbox buffer." />
+              ) : (
+                <Grid container spacing={2.5}>
+                  {priorityNotifications.map((notif, index) => (
+                    <Grid item xs={12} key={notif.ID}>
+                      <NotificationCard
+                        notif={notif}
+                        index={index + 1}
+                        viewed={viewedIds.has(notif.ID)}
+                        onView={() => markAsViewed(notif.ID)}
+                        badgeDetails={getBadgeDetails(notif.Type)}
+                        isPriority
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
             </Box>
           )}
         </Container>
 
-        {/* FOOTER */}
-        <Box sx={{ py:3, mt:2, borderTop:'1px solid rgba(255,255,255,0.04)', textAlign:'center' }}>
-          <Typography variant="caption" color="text.secondary">
-            Campus Notification Service · Priority Inbox Engine
-          </Typography>
+        {/* Footer Area */}
+        <Box component="footer" sx={{ py: 3, mt: 'auto', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+          <Container maxWidth="lg">
+            <Typography variant="body2" color="text.secondary" align="center">
+              Campus Notification Service Gateway Engine
+            </Typography>
+          </Container>
         </Box>
       </Box>
     </ThemeProvider>
   );
 }
+
+// Sub-component Helper: Avatar Icon Wrapper
+function AvatarIconWrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <Box
+      sx={{
+        width: 56,
+        height: 56,
+        borderRadius: 4,
+        background: 'rgba(99, 102, 241, 0.15)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '1px solid rgba(99, 102, 241, 0.25)',
+      }}
+    >
+      {children}
+    </Box>
+  );
+}
+
+// Sub-component Helper: Card Display for Notifications
+interface CardProps {
+  notif: Notification;
+  index?: number;
+  viewed: boolean;
+  onView: () => void;
+  badgeDetails: { label: string; color: string; bg: string };
+  isPriority?: boolean;
+}
+
+function NotificationCard({ notif, index, viewed, onView, badgeDetails, isPriority }: CardProps) {
+  return (
+    <Card
+      onClick={onView}
+      sx={{
+        opacity: viewed ? 0.6 : 1,
+        cursor: 'pointer',
+        position: 'relative',
+        overflow: 'hidden',
+        '&::before': !viewed ? {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: 5,
+          height: '100%',
+          backgroundColor: badgeDetails.color,
+        } : {},
+      }}
+    >
+      <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
+        <Grid container alignItems="center" spacing={2}>
+          
+          {/* Index Counter for Priority view */}
+          {isPriority && index && (
+            <Grid item>
+              <Typography variant="h5" color="primary" sx={{ fontWeight: 800, width: 32 }}>
+                #{index}
+              </Typography>
+            </Grid>
+          )}
+
+          <Grid item xs>
+            <Box display="flex" flexWrap="wrap" alignItems="center" gap={1.5} mb={1.5}>
+              <Chip
+                label={badgeDetails.label}
+                size="small"
+                sx={{
+                  backgroundColor: badgeDetails.bg,
+                  color: badgeDetails.color,
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  border: `1px solid ${badgeDetails.color}33`,
+                }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                {notif.Timestamp}
+              </Typography>
+              {!viewed && (
+                <Chip
+                  icon={<FiberNewIcon style={{ fontSize: 16 }} />}
+                  label="New"
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ height: 20, fontSize: '0.65rem', fontWeight: 800 }}
+                />
+              )}
+            </Box>
+            <Typography variant="h6" sx={{ fontSize: '1.1rem', mb: 0.5, textDecoration: viewed ? 'line-through' : 'none' }}>
+              {notif.Message}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              ID: {notif.ID}
+            </Typography>
+          </Grid>
+
+          <Grid item sx={{ display: { xs: 'none', sm: 'block' } }}>
+            {viewed ? (
+              <Tooltip title="Viewed">
+                <CheckCircleIcon color="secondary" />
+              </Tooltip>
+            ) : (
+              <Button size="small" variant="text" color="primary" startIcon={<InfoOutlinedIcon />}>
+                Mark Read
+              </Button>
+            )}
+          </Grid>
+        </Grid>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Sub-component Helper: Loading spinner page
+function LoadingSpinner() {
+  return (
+    <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+      <CircularProgress size={40} thickness={4} />
+    </Box>
+  );
+}
+
+// Sub-component Helper: EmptyState page
+function EmptyState({ message }: { message: string }) {
+  return (
+    <Paper
+      sx={{
+        p: 6,
+        textAlign: 'center',
+        borderRadius: 4,
+        background: 'rgba(255, 255, 255, 0.02)',
+        border: '1px solid rgba(255, 255, 255, 0.04)',
+      }}
+      elevation={0}
+    >
+      <NotificationsIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5, mb: 2 }} />
+      <Typography variant="body1" color="text.secondary">
+        {message}
+      </Typography>
+    </Paper>
+  );
+}
+
+export default App;
