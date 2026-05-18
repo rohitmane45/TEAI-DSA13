@@ -1,654 +1,414 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import {
-  ThemeProvider,
-  createTheme,
-  CssBaseline,
-  Container,
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  Grid,
-  Button,
-  Tabs,
-  Tab,
-  TextField,
-  Select,
-  MenuItem,
-  InputLabel,
-  FormControl,
-  CircularProgress,
-  Alert,
-  Badge,
-  Chip,
-  IconButton,
-  Tooltip,
-  Paper,
-  Divider,
-  Pagination,
+  ThemeProvider, createTheme, CssBaseline,
+  Container, Box, Typography, Card, CardContent,
+  Button, Tabs, Tab, TextField, Select, MenuItem,
+  InputLabel, FormControl, CircularProgress, Alert,
+  Badge, Chip, IconButton, Tooltip, Paper, Pagination,
+  Fade, Grow, Stack, useMediaQuery,
 } from '@mui/material';
 import {
   Notifications as NotificationsIcon,
-  Inbox as InboxIcon,
-  CheckCircle as CheckCircleIcon,
+  PriorityHigh as PriorityIcon,
+  CheckCircleOutline as CheckIcon,
   Refresh as RefreshIcon,
   Star as StarIcon,
-  FiberNew as FiberNewIcon,
-  InfoOutlined as InfoOutlinedIcon,
+  FiberNew as NewIcon,
+  VisibilityOff as ViewedIcon,
+  WorkOutline as PlacementIcon,
+  SchoolOutlined as ResultIcon,
+  EventNote as EventIcon,
+  NotificationsNone as GeneralIcon,
+  FilterList as FilterIcon,
+  KeyboardArrowDown,
 } from '@mui/icons-material';
 
-// 1. Establish the custom Dark Mode Theme with rich color tokens (Complies with Design Aesthetics)
-const darkTheme = createTheme({
+const theme = createTheme({
   palette: {
     mode: 'dark',
-    primary: {
-      main: '#6366f1', // Vibrant Indigo
-    },
-    secondary: {
-      main: '#06b6d4', // Cyan Accent
-    },
-    background: {
-      default: '#0a0f1d', // Ultra dark background
-      paper: '#111827',   // Dark card background
-    },
-    text: {
-      primary: '#f9fafb',
-      secondary: '#9ca3af',
-    },
+    primary: { main: '#818cf8' },
+    secondary: { main: '#34d399' },
+    background: { default: '#0f172a', paper: '#1e293b' },
+    text: { primary: '#f1f5f9', secondary: '#94a3b8' },
+    error: { main: '#f87171' },
+    warning: { main: '#fbbf24' },
+    success: { main: '#34d399' },
   },
   typography: {
-    fontFamily: '"Outfit", "Inter", "Roboto", sans-serif',
-    h3: {
-      fontWeight: 800,
-      letterSpacing: '-0.025em',
-    },
-    h4: {
-      fontWeight: 700,
-    },
-    h6: {
-      fontWeight: 600,
-    },
+    fontFamily: '"Inter", "Segoe UI", sans-serif',
+    h4: { fontWeight: 700, letterSpacing: '-0.02em' },
+    h6: { fontWeight: 600 },
   },
+  shape: { borderRadius: 12 },
   components: {
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          background: 'rgba(17, 24, 39, 0.7)',
-          backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: 16,
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          '&:hover': {
-            transform: 'translateY(-4px)',
-            borderColor: 'rgba(99, 102, 241, 0.4)',
-            boxShadow: '0 12px 20px -10px rgba(99, 102, 241, 0.3)',
-          },
-        },
-      },
-    },
     MuiButton: {
       styleOverrides: {
-        root: {
-          borderRadius: 8,
-          textTransform: 'none',
-          fontWeight: 600,
-        },
+        root: { textTransform: 'none', fontWeight: 600, borderRadius: 10 },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: { backgroundImage: 'none' },
       },
     },
   },
 });
 
-interface Notification {
-  ID: string;
-  Type: string;
-  Message: string;
-  Timestamp: string;
+const COLORS: Record<string, { accent: string; bg: string; icon: React.ReactNode }> = {
+  placement: {
+    accent: '#fbbf24', bg: 'rgba(251,191,36,0.12)',
+    icon: <PlacementIcon sx={{ fontSize: 20, color: '#fbbf24' }} />,
+  },
+  result: {
+    accent: '#34d399', bg: 'rgba(52,211,153,0.12)',
+    icon: <ResultIcon sx={{ fontSize: 20, color: '#34d399' }} />,
+  },
+  event: {
+    accent: '#f472b6', bg: 'rgba(244,114,182,0.12)',
+    icon: <EventIcon sx={{ fontSize: 20, color: '#f472b6' }} />,
+  },
+  general: {
+    accent: '#94a3b8', bg: 'rgba(148,163,184,0.1)',
+    icon: <GeneralIcon sx={{ fontSize: 20, color: '#94a3b8' }} />,
+  },
+};
+
+function getColor(type: string) {
+  const t = type.toLowerCase();
+  if (t.includes('placement')) return COLORS.placement;
+  if (t.includes('result')) return COLORS.result;
+  if (t.includes('event')) return COLORS.event;
+  return COLORS.general;
 }
 
-function App() {
-  const [activeTab, setActiveTab] = useState<number>(0);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [priorityNotifications, setPriorityNotifications] = useState<Notification[]>([]);
-  
-  // States for All Notifications Page
-  const [limit, setLimit] = useState<number>(10);
-  const [page, setPage] = useState<number>(1);
-  const [typeFilter, setTypeFilter] = useState<string>('');
-  
-  // States for Priority Inbox Page
-  const [priorityN, setPriorityN] = useState<number>(10);
-  const [priorityTypeFilter, setPriorityTypeFilter] = useState<string>('');
-  
-  // Loading & Error states
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Local storage for viewed notifications
-  const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
+function timeAgo(ts: string): string {
+  const diff = Date.now() - new Date(ts.replace(' ', 'T')).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
 
-  // Load viewed notification IDs on start
-  useEffect(() => {
-    const saved = localStorage.getItem('viewedNotificationIds');
-    if (saved) {
-      try {
-        setViewedIds(new Set(JSON.parse(saved)));
-      } catch (e) {
-        // Silently capture parse errors
-      }
-    }
+interface Notif {
+  ID: string; Type: string; Message: string; Timestamp: string;
+}
+
+export default function App() {
+  const [tab, setTab] = useState(0);
+  const [notifs, setNotifs] = useState<Notif[]>([]);
+  const [priority, setPriority] = useState<Notif[]>([]);
+  const [limit, setLimit] = useState(10);
+  const [page, setPage] = useState(1);
+  const [typeFilter, setTypeFilter] = useState('');
+  const [topN, setTopN] = useState(10);
+  const [prioFilter, setPrioFilter] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [viewed, setViewed] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('viewed') || '[]')); }
+    catch { return new Set(); }
+  });
+  const mobile = useMediaQuery('(max-width:600px)');
+
+  const saveViewed = useCallback((s: Set<string>) => {
+    setViewed(s);
+    localStorage.setItem('viewed', JSON.stringify([...s]));
   }, []);
 
-  // Sync viewed notifications to local storage
-  const markAsViewed = (id: string) => {
-    const newViewed = new Set(viewedIds);
-    newViewed.add(id);
-    setViewedIds(newViewed);
-    localStorage.setItem('viewedNotificationIds', JSON.stringify(Array.from(newViewed)));
+  const markRead = (id: string) => { const s = new Set(viewed); s.add(id); saveViewed(s); };
+  const markAll = () => {
+    const s = new Set(viewed);
+    [...notifs, ...priority].forEach(n => s.add(n.ID));
+    saveViewed(s);
   };
 
-  const markAllAsViewed = () => {
-    const allIds = new Set(viewedIds);
-    notifications.forEach((n) => allIds.add(n.ID));
-    priorityNotifications.forEach((n) => allIds.add(n.ID));
-    setViewedIds(allIds);
-    localStorage.setItem('viewedNotificationIds', JSON.stringify(Array.from(allIds)));
-  };
-
-  // Fetch paginated/filtered notifications
-  const fetchAllNotifications = async () => {
-    setLoading(true);
-    setError(null);
+  const fetchAll = useCallback(async () => {
+    setLoading(true); setErr(null);
     try {
-      const response = await axios.get('http://localhost:5000/notifications', {
-        params: {
-          limit,
-          page,
-          notification_type: typeFilter || undefined,
-        },
+      const r = await axios.get('http://localhost:5000/notifications', {
+        params: { limit, page, notification_type: typeFilter || undefined },
       });
-      if (response.data && response.data.success) {
-        setNotifications(response.data.notifications);
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to connect to the backend server.');
-    } finally {
-      setLoading(false);
-    }
-  };
+      if (r.data?.success) setNotifs(r.data.notifications);
+    } catch (e: any) { setErr(e.message); }
+    finally { setLoading(false); }
+  }, [limit, page, typeFilter]);
 
-  // Fetch prioritized notifications using custom Heap algorithm
-  const fetchPriorityNotifications = async () => {
-    setLoading(true);
-    setError(null);
+  const fetchPrio = useCallback(async () => {
+    setLoading(true); setErr(null);
     try {
-      const response = await axios.get('http://localhost:5000/notifications/priority', {
-        params: {
-          n: priorityN,
-        },
-      });
-      if (response.data && response.data.success) {
-        let fetched = response.data.notifications as Notification[];
-        // Client-side filter on type if specified
-        if (priorityTypeFilter) {
-          fetched = fetched.filter(
-            (n) => n.Type.toLowerCase() === priorityTypeFilter.toLowerCase()
-          );
-        }
-        setPriorityNotifications(fetched);
+      const r = await axios.get('http://localhost:5000/notifications/priority', { params: { n: topN } });
+      if (r.data?.success) {
+        let d = r.data.notifications as Notif[];
+        if (prioFilter) d = d.filter(n => n.Type.toLowerCase() === prioFilter.toLowerCase());
+        setPriority(d);
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch priority notifications.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    } catch (e: any) { setErr(e.message); }
+    finally { setLoading(false); }
+  }, [topN, prioFilter]);
 
-  // Trigger fetches depending on active view tab
-  useEffect(() => {
-    if (activeTab === 0) {
-      fetchAllNotifications();
-    } else {
-      fetchPriorityNotifications();
-    }
-  }, [activeTab, limit, page, typeFilter, priorityN, priorityTypeFilter]);
+  useEffect(() => { tab === 0 ? fetchAll() : fetchPrio(); }, [tab, fetchAll, fetchPrio]);
 
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
-    setError(null);
-  };
-
-  // Style chip mapping for Placement, Result, Event categories
-  const getBadgeDetails = (type: string) => {
-    const normType = type.toLowerCase();
-    if (normType.includes('placement')) {
-      return { label: 'Placement', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.15)' };
-    }
-    if (normType.includes('result')) {
-      return { label: 'Result', color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)' };
-    }
-    if (normType.includes('event')) {
-      return { label: 'Event', color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.15)' };
-    }
-    return { label: 'General', color: '#9ca3af', bg: 'rgba(156, 163, 175, 0.15)' };
-  };
-
-  // Compute stats
-  const unreadCount = notifications.filter(n => !viewedIds.has(n.ID)).length;
+  const unread = notifs.filter(n => !viewed.has(n.ID)).length;
+  const list = tab === 0 ? notifs : priority;
 
   return (
-    <ThemeProvider theme={darkTheme}>
+    <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ minHeight: '100vh', py: 4, display: 'flex', flexDirection: 'column' }}>
-        
-        {/* Navigation / Header Area */}
-        <Container maxWidth="lg" sx={{ mb: 4 }}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              borderRadius: 4,
-              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(6, 182, 212, 0.1) 100%)',
-              border: '1px solid rgba(99, 102, 241, 0.2)',
-              mb: 3,
-            }}
-          >
-            <Grid container alignItems="center" spacing={2}>
-              <Grid item xs={12} md={6}>
-                <Box display="flex" alignItems="center" gap={2}>
-                  <Badge badgeContent={unreadCount} color="error" overlap="circular">
-                    <AvatarIconWrapper>
-                      <NotificationsIcon color="primary" sx={{ fontSize: 32 }} />
-                    </AvatarIconWrapper>
-                  </Badge>
-                  <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 800 }}>
-                      Campus Notifications
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Stay updated with real-time Placements, Results, and Events
-                    </Typography>
+      <Box sx={{ minHeight: '100vh', background: 'linear-gradient(180deg, #0f172a 0%, #1a1f3a 100%)' }}>
+
+        {/* ─── HEADER ─── */}
+        <Box sx={{
+          background: 'linear-gradient(135deg, rgba(129,140,248,0.15) 0%, rgba(52,211,153,0.08) 100%)',
+          borderBottom: '1px solid rgba(255,255,255,0.06)', py: { xs: 3, md: 4 },
+        }}>
+          <Container maxWidth="md">
+            <Stack direction={mobile ? 'column' : 'row'} alignItems={mobile ? 'flex-start' : 'center'} justifyContent="space-between" spacing={2}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <Badge badgeContent={unread} color="error" overlap="circular"
+                  sx={{ '& .MuiBadge-badge': { fontWeight: 700, fontSize: 12 } }}>
+                  <Box sx={{
+                    width: 52, height: 52, borderRadius: 3,
+                    background: 'linear-gradient(135deg, #818cf8, #6366f1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 4px 20px rgba(99,102,241,0.4)',
+                  }}>
+                    <NotificationsIcon sx={{ color: '#fff', fontSize: 28 }} />
                   </Box>
+                </Badge>
+                <Box>
+                  <Typography variant="h4" sx={{ fontSize: { xs: '1.4rem', md: '1.75rem' } }}>
+                    Campus Notifications
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.3 }}>
+                    Real-time Placements, Results &amp; Events
+                  </Typography>
                 </Box>
-              </Grid>
-              <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' }, gap: 1.5 }}>
-                <Button
-                  variant="outlined"
-                  startIcon={<CheckCircleIcon />}
-                  onClick={markAllAsViewed}
-                  disabled={loading}
-                >
-                  Mark All as Read
+              </Stack>
+              <Stack direction="row" spacing={1}>
+                <Button variant="outlined" size="small" startIcon={<CheckIcon />}
+                  onClick={markAll} sx={{ borderColor: 'rgba(255,255,255,0.15)', color: 'text.secondary' }}>
+                  Mark All Read
                 </Button>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={<RefreshIcon />}
-                  onClick={activeTab === 0 ? fetchAllNotifications : fetchPriorityNotifications}
-                  disabled={loading}
-                >
+                <Button variant="contained" size="small" startIcon={<RefreshIcon />}
+                  onClick={tab === 0 ? fetchAll : fetchPrio}
+                  sx={{ background: 'linear-gradient(135deg, #818cf8, #6366f1)', boxShadow: '0 2px 12px rgba(99,102,241,0.4)' }}>
                   Refresh
                 </Button>
-              </Grid>
-            </Grid>
+              </Stack>
+            </Stack>
+          </Container>
+        </Box>
+
+        <Container maxWidth="md" sx={{ py: 3 }}>
+
+          {/* ─── TABS ─── */}
+          <Paper sx={{ mb: 3, background: '#1e293b', border: '1px solid rgba(255,255,255,0.06)' }} elevation={0}>
+            <Tabs value={tab} onChange={(_, v) => { setTab(v); setErr(null); }}
+              variant="fullWidth" indicatorColor="primary" textColor="primary"
+              sx={{ '& .MuiTab-root': { py: 1.8, fontWeight: 700, fontSize: '0.9rem', letterSpacing: '0.03em' } }}>
+              <Tab icon={<NotificationsIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="All Notifications" />
+              <Tab icon={<PriorityIcon sx={{ fontSize: 20 }} />} iconPosition="start" label="Priority Inbox" />
+            </Tabs>
           </Paper>
 
-          {/* Tab Selection (All vs Priority) */}
-          <Tabs
-            value={activeTab}
-            onChange={handleTabChange}
-            indicatorColor="primary"
-            textColor="primary"
-            variant="fullWidth"
-            sx={{
-              borderBottom: 1,
-              borderColor: 'divider',
-              '& .MuiTab-root': { py: 2, fontWeight: 700, fontSize: '1rem' },
-            }}
-          >
-            <Tab
-              icon={<NotificationsIcon />}
-              iconPosition="start"
-              label="All Notifications"
-            />
-            <Tab
-              icon={<InboxIcon />}
-              iconPosition="start"
-              label="Priority Inbox"
-            />
-          </Tabs>
-        </Container>
+          {err && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{err}</Alert>}
 
-        {/* Content Container */}
-        <Container maxWidth="lg" sx={{ flexGrow: 1 }}>
-          {error && (
-            <Alert severity="error" sx={{ mb: 4, borderRadius: 2 }}>
-              {error}
-            </Alert>
-          )}
-
-          {/* 1. All Notifications View */}
-          {activeTab === 0 && (
-            <Box>
-              {/* Toolbar Controls */}
-              <Paper sx={{ p: 2.5, mb: 4, borderRadius: 3, background: '#111827' }} elevation={0}>
-                <Grid container spacing={2} alignItems="center">
-                  <Grid item xs={12} sm={4}>
-                    <FormControl fullWidth variant="outlined" size="small">
-                      <InputLabel>Category Filter</InputLabel>
-                      <Select
-                        value={typeFilter}
-                        onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-                        label="Category Filter"
-                      >
-                        <MenuItem value="">All Categories</MenuItem>
-                        <MenuItem value="Placement">Placements</MenuItem>
-                        <MenuItem value="Result">Results</MenuItem>
-                        <MenuItem value="Event">Events</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                  <Grid item xs={12} sm={4}>
-                    <FormControl fullWidth variant="outlined" size="small">
-                      <InputLabel>Items Per Page</InputLabel>
-                      <Select
-                        value={limit}
-                        onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
-                        label="Items Per Page"
-                      >
-                        <MenuItem value={5}>5 Items</MenuItem>
-                        <MenuItem value={10}>10 Items</MenuItem>
-                        <MenuItem value={15}>15 Items</MenuItem>
-                        <MenuItem value={20}>20 Items</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                  <Grid item xs={12} sm={4} display="flex" justifyContent="flex-end">
-                    <Typography variant="body2" color="text.secondary">
-                      Showing loaded feed
-                    </Typography>
-                  </Grid>
-                </Grid>
-              </Paper>
-
-              {loading ? (
-                <LoadingSpinner />
-              ) : notifications.length === 0 ? (
-                <EmptyState message="No notifications matching the selected filters were found." />
-              ) : (
-                <Grid container spacing={2.5}>
-                  {notifications.map((notif) => (
-                    <Grid item xs={12} key={notif.ID}>
-                      <NotificationCard
-                        notif={notif}
-                        viewed={viewedIds.has(notif.ID)}
-                        onView={() => markAsViewed(notif.ID)}
-                        badgeDetails={getBadgeDetails(notif.Type)}
-                      />
-                    </Grid>
-                  ))}
-                </Grid>
-              )}
-
-              {/* Simple Local Pagination Control */}
-              {!loading && notifications.length > 0 && (
-                <Box display="flex" justifyContent="center" mt={4}>
-                  <Pagination
-                    count={5} // Keep pagination slider fluid
-                    page={page}
-                    onChange={(_e, val) => setPage(val)}
-                    color="primary"
-                    size="large"
-                  />
-                </Box>
-              )}
-            </Box>
-          )}
-
-          {/* 2. Priority Inbox View */}
-          {activeTab === 1 && (
-            <Box>
-              {/* Algorithm Details Header */}
-              <Box mb={4}>
-                <Paper
-                  sx={{
-                    p: 3,
-                    borderRadius: 3,
-                    background: 'rgba(99, 102, 241, 0.05)',
-                    border: '1px dashed rgba(99, 102, 241, 0.3)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 2,
-                  }}
-                  elevation={0}
-                >
-                  <StarIcon color="primary" sx={{ fontSize: 28 }} />
-                  <Typography variant="body2" color="text.secondary">
-                    <strong>Min-Heap Sorted:</strong> This page renders the top <code>n</code> updates utilizing our highly efficient size-capped Min-Heap routing algorithm. Prioritization strictly follows weight layers: <code>Placement &gt; Result &gt; Event</code>, tie-broken by time.
+          {/* ─── FILTERS ─── */}
+          <Fade in>
+            <Paper sx={{ p: 2, mb: 3, background: 'rgba(30,41,59,0.7)', border: '1px solid rgba(255,255,255,0.06)' }} elevation={0}>
+              {tab === 0 ? (
+                <Stack direction={mobile ? 'column' : 'row'} spacing={2} alignItems="center">
+                  <FormControl size="small" sx={{ minWidth: 160 }}>
+                    <InputLabel><FilterIcon sx={{ fontSize: 14, mr: 0.5 }} />Category</InputLabel>
+                    <Select value={typeFilter} label="Category"
+                      onChange={e => { setTypeFilter(e.target.value); setPage(1); }}>
+                      <MenuItem value="">All Categories</MenuItem>
+                      <MenuItem value="Placement">🏢 Placements</MenuItem>
+                      <MenuItem value="Result">📊 Results</MenuItem>
+                      <MenuItem value="Event">🎉 Events</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <FormControl size="small" sx={{ minWidth: 130 }}>
+                    <InputLabel>Per Page</InputLabel>
+                    <Select value={limit} label="Per Page"
+                      onChange={e => { setLimit(Number(e.target.value)); setPage(1); }}>
+                      {[5, 10, 15, 20].map(v => <MenuItem key={v} value={v}>{v} items</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+                    Page {page} · {notifs.length} loaded
                   </Typography>
-                </Paper>
-              </Box>
-
-              {/* Priority Controls */}
-              <Paper sx={{ p: 2.5, mb: 4, borderRadius: 3, background: '#111827' }} elevation={0}>
-                <Grid container spacing={3} alignItems="center">
-                  <Grid item xs={12} sm={4}>
-                    <TextField
-                      fullWidth
-                      label="Capacity (n)"
-                      type="number"
-                      variant="outlined"
-                      size="small"
-                      value={priorityN}
-                      onChange={(e) => setPriorityN(Math.max(1, Number(e.target.value)))}
-                      inputProps={{ min: 1 }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={4}>
-                    <FormControl fullWidth variant="outlined" size="small">
-                      <InputLabel>Type Filter</InputLabel>
-                      <Select
-                        value={priorityTypeFilter}
-                        onChange={(e) => setPriorityTypeFilter(e.target.value)}
-                        label="Type Filter"
-                      >
-                        <MenuItem value="">All Priority Types</MenuItem>
-                        <MenuItem value="Placement">Placements</MenuItem>
-                        <MenuItem value="Result">Results</MenuItem>
-                        <MenuItem value="Event">Events</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                  <Grid item xs={12} sm={4} display="flex" justifyContent="flex-end">
-                    <Chip
-                      icon={<StarIcon style={{ color: '#fbbf24' }} />}
-                      label={`Top ${priorityN} Priority`}
-                      variant="outlined"
-                      color="secondary"
-                    />
-                  </Grid>
-                </Grid>
-              </Paper>
-
-              {loading ? (
-                <LoadingSpinner />
-              ) : priorityNotifications.length === 0 ? (
-                <EmptyState message="No high priority items found in the current inbox buffer." />
+                </Stack>
               ) : (
-                <Grid container spacing={2.5}>
-                  {priorityNotifications.map((notif, index) => (
-                    <Grid item xs={12} key={notif.ID}>
-                      <NotificationCard
-                        notif={notif}
-                        index={index + 1}
-                        viewed={viewedIds.has(notif.ID)}
-                        onView={() => markAsViewed(notif.ID)}
-                        badgeDetails={getBadgeDetails(notif.Type)}
-                        isPriority
-                      />
-                    </Grid>
-                  ))}
-                </Grid>
+                <Stack direction={mobile ? 'column' : 'row'} spacing={2} alignItems="center">
+                  <TextField size="small" label="Top N" type="number" value={topN}
+                    onChange={e => setTopN(Math.max(1, Number(e.target.value)))}
+                    inputProps={{ min: 1 }} sx={{ width: 100 }} />
+                  <FormControl size="small" sx={{ minWidth: 160 }}>
+                    <InputLabel>Filter Type</InputLabel>
+                    <Select value={prioFilter} label="Filter Type"
+                      onChange={e => setPrioFilter(e.target.value)}>
+                      <MenuItem value="">All Types</MenuItem>
+                      <MenuItem value="Placement">🏢 Placements</MenuItem>
+                      <MenuItem value="Result">📊 Results</MenuItem>
+                      <MenuItem value="Event">🎉 Events</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <Chip icon={<StarIcon sx={{ color: '#fbbf24 !important' }} />}
+                    label={`Top ${topN} Priority`} variant="outlined"
+                    sx={{ ml: 'auto', borderColor: 'rgba(251,191,36,0.4)', color: '#fbbf24' }} />
+                </Stack>
               )}
+            </Paper>
+          </Fade>
+
+          {/* ─── PRIORITY BANNER ─── */}
+          {tab === 1 && (
+            <Paper sx={{
+              p: 2, mb: 3, borderRadius: 2,
+              background: 'linear-gradient(135deg, rgba(129,140,248,0.08), rgba(52,211,153,0.05))',
+              border: '1px dashed rgba(129,140,248,0.3)',
+            }} elevation={0}>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <StarIcon sx={{ color: '#818cf8' }} />
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Min-Heap Algorithm:</strong> Notifications ranked by weight
+                  (<code style={{ color: '#fbbf24' }}>Placement</code> &gt;{' '}
+                  <code style={{ color: '#34d399' }}>Result</code> &gt;{' '}
+                  <code style={{ color: '#f472b6' }}>Event</code>) then by recency.
+                </Typography>
+              </Stack>
+            </Paper>
+          )}
+
+          {/* ─── NOTIFICATION LIST ─── */}
+          {loading ? (
+            <Box display="flex" justifyContent="center" py={8}>
+              <CircularProgress size={36} thickness={4} />
+            </Box>
+          ) : list.length === 0 ? (
+            <Paper sx={{ p: 6, textAlign: 'center', background: 'rgba(30,41,59,0.5)', border: '1px solid rgba(255,255,255,0.04)' }} elevation={0}>
+              <NotificationsIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.4, mb: 1 }} />
+              <Typography color="text.secondary">No notifications found.</Typography>
+            </Paper>
+          ) : (
+            <Stack spacing={1.5}>
+              {list.map((n, i) => {
+                const read = viewed.has(n.ID);
+                const c = getColor(n.Type);
+                return (
+                  <Grow in key={n.ID} timeout={200 + i * 60}>
+                    <Card onClick={() => markRead(n.ID)} sx={{
+                      cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                      background: read ? 'rgba(30,41,59,0.4)' : '#1e293b',
+                      border: `1px solid ${read ? 'rgba(255,255,255,0.04)' : c.accent + '22'}`,
+                      transition: 'all 0.25s ease',
+                      '&:hover': {
+                        transform: 'translateY(-2px)',
+                        borderColor: c.accent + '55',
+                        boxShadow: `0 8px 24px ${c.accent}15`,
+                      },
+                      '&::before': {
+                        content: '""', position: 'absolute', left: 0, top: 0,
+                        width: 4, height: '100%',
+                        background: read ? 'transparent' : `linear-gradient(180deg, ${c.accent}, ${c.accent}66)`,
+                      },
+                    }}>
+                      <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+                        <Stack direction="row" alignItems="center" spacing={2}>
+
+                          {/* Priority rank badge */}
+                          {tab === 1 && (
+                            <Box sx={{
+                              width: 36, height: 36, borderRadius: 2, flexShrink: 0,
+                              background: `linear-gradient(135deg, ${c.accent}22, ${c.accent}11)`,
+                              border: `1px solid ${c.accent}33`,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', color: c.accent }}>
+                                #{i + 1}
+                              </Typography>
+                            </Box>
+                          )}
+
+                          {/* Type icon */}
+                          <Box sx={{
+                            width: 40, height: 40, borderRadius: 2, flexShrink: 0,
+                            background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            {c.icon}
+                          </Box>
+
+                          {/* Content */}
+                          <Box flex={1} minWidth={0}>
+                            <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" mb={0.5}>
+                              <Chip label={n.Type} size="small" sx={{
+                                height: 22, fontSize: '0.7rem', fontWeight: 700,
+                                backgroundColor: c.bg, color: c.accent,
+                                border: `1px solid ${c.accent}33`,
+                              }} />
+                              <Typography variant="caption" color="text.secondary">
+                                {timeAgo(n.Timestamp)}
+                              </Typography>
+                              {!read && (
+                                <Chip icon={<NewIcon sx={{ fontSize: '14px !important' }} />}
+                                  label="New" size="small" color="primary" variant="outlined"
+                                  sx={{ height: 20, fontSize: '0.6rem', fontWeight: 800 }} />
+                              )}
+                            </Stack>
+                            <Typography variant="subtitle1" sx={{
+                              fontWeight: 600, fontSize: '0.95rem',
+                              color: read ? 'text.secondary' : 'text.primary',
+                              textDecoration: read ? 'line-through' : 'none',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}>
+                              {n.Message}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ opacity: 0.6, fontSize: '0.65rem' }}>
+                              {n.Timestamp}
+                            </Typography>
+                          </Box>
+
+                          {/* Status icon */}
+                          {!mobile && (
+                            <Box flexShrink={0}>
+                              {read ? (
+                                <Tooltip title="Read"><ViewedIcon sx={{ color: 'text.secondary', opacity: 0.4 }} /></Tooltip>
+                              ) : (
+                                <Tooltip title="Mark as read"><CheckIcon sx={{ color: '#818cf8' }} /></Tooltip>
+                              )}
+                            </Box>
+                          )}
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  </Grow>
+                );
+              })}
+            </Stack>
+          )}
+
+          {/* ─── PAGINATION ─── */}
+          {tab === 0 && !loading && notifs.length > 0 && (
+            <Box display="flex" justifyContent="center" mt={4}>
+              <Pagination count={5} page={page} onChange={(_, v) => setPage(v)}
+                color="primary" size="large"
+                sx={{ '& .MuiPaginationItem-root': { fontWeight: 600 } }} />
             </Box>
           )}
         </Container>
 
-        {/* Footer Area */}
-        <Box component="footer" sx={{ py: 3, mt: 'auto', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-          <Container maxWidth="lg">
-            <Typography variant="body2" color="text.secondary" align="center">
-              Campus Notification Service Gateway Engine
-            </Typography>
-          </Container>
+        {/* ─── FOOTER ─── */}
+        <Box sx={{ py: 3, mt: 4, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <Typography variant="caption" color="text.secondary" display="block" textAlign="center">
+            Campus Notification Service · Priority Inbox Engine
+          </Typography>
         </Box>
       </Box>
     </ThemeProvider>
   );
 }
-
-// Sub-component Helper: Avatar Icon Wrapper
-function AvatarIconWrapper({ children }: { children: React.ReactNode }) {
-  return (
-    <Box
-      sx={{
-        width: 56,
-        height: 56,
-        borderRadius: 4,
-        background: 'rgba(99, 102, 241, 0.15)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        border: '1px solid rgba(99, 102, 241, 0.25)',
-      }}
-    >
-      {children}
-    </Box>
-  );
-}
-
-// Sub-component Helper: Card Display for Notifications
-interface CardProps {
-  notif: Notification;
-  index?: number;
-  viewed: boolean;
-  onView: () => void;
-  badgeDetails: { label: string; color: string; bg: string };
-  isPriority?: boolean;
-}
-
-function NotificationCard({ notif, index, viewed, onView, badgeDetails, isPriority }: CardProps) {
-  return (
-    <Card
-      onClick={onView}
-      sx={{
-        opacity: viewed ? 0.6 : 1,
-        cursor: 'pointer',
-        position: 'relative',
-        overflow: 'hidden',
-        '&::before': !viewed ? {
-          content: '""',
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: 5,
-          height: '100%',
-          backgroundColor: badgeDetails.color,
-        } : {},
-      }}
-    >
-      <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
-        <Grid container alignItems="center" spacing={2}>
-          
-          {/* Index Counter for Priority view */}
-          {isPriority && index && (
-            <Grid item>
-              <Typography variant="h5" color="primary" sx={{ fontWeight: 800, width: 32 }}>
-                #{index}
-              </Typography>
-            </Grid>
-          )}
-
-          <Grid item xs>
-            <Box display="flex" flexWrap="wrap" alignItems="center" gap={1.5} mb={1.5}>
-              <Chip
-                label={badgeDetails.label}
-                size="small"
-                sx={{
-                  backgroundColor: badgeDetails.bg,
-                  color: badgeDetails.color,
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  border: `1px solid ${badgeDetails.color}33`,
-                }}
-              />
-              <Typography variant="caption" color="text.secondary">
-                {notif.Timestamp}
-              </Typography>
-              {!viewed && (
-                <Chip
-                  icon={<FiberNewIcon style={{ fontSize: 16 }} />}
-                  label="New"
-                  size="small"
-                  color="primary"
-                  variant="outlined"
-                  sx={{ height: 20, fontSize: '0.65rem', fontWeight: 800 }}
-                />
-              )}
-            </Box>
-            <Typography variant="h6" sx={{ fontSize: '1.1rem', mb: 0.5, textDecoration: viewed ? 'line-through' : 'none' }}>
-              {notif.Message}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              ID: {notif.ID}
-            </Typography>
-          </Grid>
-
-          <Grid item sx={{ display: { xs: 'none', sm: 'block' } }}>
-            {viewed ? (
-              <Tooltip title="Viewed">
-                <CheckCircleIcon color="secondary" />
-              </Tooltip>
-            ) : (
-              <Button size="small" variant="text" color="primary" startIcon={<InfoOutlinedIcon />}>
-                Mark Read
-              </Button>
-            )}
-          </Grid>
-        </Grid>
-      </CardContent>
-    </Card>
-  );
-}
-
-// Sub-component Helper: Loading spinner page
-function LoadingSpinner() {
-  return (
-    <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
-      <CircularProgress size={40} thickness={4} />
-    </Box>
-  );
-}
-
-// Sub-component Helper: EmptyState page
-function EmptyState({ message }: { message: string }) {
-  return (
-    <Paper
-      sx={{
-        p: 6,
-        textAlign: 'center',
-        borderRadius: 4,
-        background: 'rgba(255, 255, 255, 0.02)',
-        border: '1px solid rgba(255, 255, 255, 0.04)',
-      }}
-      elevation={0}
-    >
-      <NotificationsIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5, mb: 2 }} />
-      <Typography variant="body1" color="text.secondary">
-        {message}
-      </Typography>
-    </Paper>
-  );
-}
-
-export default App;
