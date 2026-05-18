@@ -214,6 +214,45 @@ app.get('/notifications/priority', async (req, res) => {
   }
 });
 
+/**
+ * Route: GET /notifications
+ * Exposes a paginated and filtered list of all campus notifications.
+ */
+app.get('/notifications', async (req, res) => {
+  const limit = req.query.limit || '';
+  const page = req.query.page || '';
+  const type = req.query.notification_type || '';
+
+  try {
+    const token = await fetchToken();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // Construct URL with query parameters
+    const queryParams = new URLSearchParams();
+    if (limit) queryParams.append('limit', limit);
+    if (page) queryParams.append('page', page);
+    if (type) queryParams.append('notification_type', type);
+
+    const targetUrl = `${NOTIFICATIONS_URL}?${queryParams.toString()}`;
+    
+    const response = await axios.get(targetUrl, { headers });
+    
+    res.json({
+      success: true,
+      notifications: response.data.notifications || []
+    });
+  } catch (error) {
+    const errMsg = error.response ? JSON.stringify(error.response.data) : error.message;
+    await logToServer('error', 'controller', `Notifications fetch failed: ${errMsg}`);
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch campus notifications',
+      error: error.message
+    });
+  }
+});
+
 // Start the Express app
 app.listen(PORT, () => {
   logToServer('info', 'controller', `Server init on port ${PORT}`).catch(() => {});
