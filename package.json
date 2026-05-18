@@ -1,0 +1,12 @@
+{
+  "name": "notification-system-root",
+  "version": "1.0.0",
+  "description": "Root repository setup for evaluation",
+  "private": true,
+  "dependencies": {
+    "axios": "^1.6.8",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
