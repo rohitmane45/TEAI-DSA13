@@ -28,9 +28,7 @@ function requestLoggingMiddleware(req, res, next) {
     }
 
     // Log request asynchronously in background
-    logToServer(level, pkg, logMessage).catch((err) => {
-      console.error('[Middleware Async Logging Error]:', err.message);
-    });
+    logToServer(level, pkg, logMessage).catch(() => {});
   });
 
   next();

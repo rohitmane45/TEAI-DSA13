@@ -216,6 +216,5 @@ app.get('/notifications/priority', async (req, res) => {
 
 // Start the Express app
 app.listen(PORT, () => {
-  console.log(`Backend server is running on http://localhost:${PORT}`);
-  logToServer('info', 'controller', `Server initialized on port ${PORT}`).catch(console.error);
+  logToServer('info', 'controller', `Server init on port ${PORT}`).catch(() => {});
 });

@@ -42,7 +42,7 @@ async function getAuthToken() {
       return cachedToken;
     }
   } catch (error) {
-    console.error('[Logger Auth Error] Failed to obtain token:', error.response ? error.response.data : error.message);
+    // Silently fail if auth fails to avoid infinite loops and comply with no-console rule
   }
   return null;
 }
@@ -56,7 +56,7 @@ async function getAuthToken() {
 async function logToServer(level, pkg, message) {
   const token = await getAuthToken();
   if (!token) {
-    console.warn('[Logger Warning] Skipping log dispatch due to missing auth token.');
+    // Skip silently
     return;
   }
 
@@ -74,7 +74,7 @@ async function logToServer(level, pkg, message) {
       }
     });
   } catch (error) {
-    console.error('[Logger API Error] Failed to send log to server:', error.response ? error.response.data : error.message);
+    // Silently fail to avoid infinite error loops
   }
 }
 
